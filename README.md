@@ -1,6 +1,6 @@
 # `group-similar`
 
-Crate alloing values to be grouped based on [Jaro-Winkler
+Crate allowing values to be grouped based on [Jaro-Winkler
 distance](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance).
 
 ## License
