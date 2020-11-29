@@ -1,0 +1,84 @@
+use kodama::Method;
+
+/// `Config` manages grouping configuration based on three settings (managed internally);
+/// `threshold`, `method`, and `compare`.
+///
+/// `threshold` captures how strict or permissive the comparison is.
+///
+/// `method` represents the dendrogram linkage method, and (at least for Jaro-Winkler) should
+/// be set to `Method::Complete`.
+///
+/// Finally, `compare` is the closure used to determine how similar two values are to each other.
+/// For string-based comparisons, we make available Jaro-Winkler. This closure must be idempotent.
+pub struct Config<V> {
+    pub(super) threshold: Threshold,
+    pub(super) method: Method,
+    pub(super) compare: Box<dyn Fn(&V, &V) -> f64 + Send + Sync>,
+}
+
+/// `Named` describes data structures with a particular name to be grouped based on a `&str` value.
+///
+/// Values to be grouped must implement this trait.
+///
+/// # Example
+///
+/// ```
+/// use group_similar::Named;
+///
+/// struct Merchant {
+///   id: usize,
+///   name: String
+/// }
+///
+/// impl Named for Merchant {
+///     fn name(&self) -> &str {
+///         &self.name
+///     }
+/// }
+/// ```
+pub trait Named {
+    /// Return a `&str` representation of the structure
+    fn name(&self) -> &str;
+}
+
+impl<V: Named> Config<V> {
+    /// Construct a configuration using Jaro-Winkler for structure comparison
+    pub fn jaro_winkler(threshold: Threshold) -> Self {
+        Config {
+            threshold,
+            method: Method::Complete,
+            compare: Box::new(|a, b| 1.0 - strsim::jaro_winkler(a.name(), b.name())),
+        }
+    }
+}
+
+/// `Threshold` is a newtype wrapper describing how permissive comparisons are for a given
+/// comparison closure.
+///
+/// This value is configurable and is a float between 0 and 1; 0 represents a threshold of exact
+/// matches, while 1 represents entirely permissive values.
+pub struct Threshold(f64);
+
+impl Threshold {
+    pub(super) fn within(&self, dissimilarity: f64) -> bool {
+        dissimilarity <= self.0
+    }
+}
+
+impl Default for Threshold {
+    fn default() -> Self {
+        Threshold(0.25)
+    }
+}
+
+impl std::convert::TryFrom<f64> for Threshold {
+    type Error = &'static str;
+
+    fn try_from(input: f64) -> Result<Self, Self::Error> {
+        if input < 0.0 || input > 1.0 {
+            Err("Threshold must be between 0 and 1")
+        } else {
+            Ok(Threshold(input))
+        }
+    }
+}

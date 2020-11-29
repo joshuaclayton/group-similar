@@ -1,0 +1,17 @@
+[package]
+name = "group-similar"
+description = "Group similar values based on Jaro-Winkler distance"
+repository = "https://github.com/joshuaclayton/group-similar"
+version = "0.1.0"
+authors = ["Joshua Clayton <joshua.clayton@gmail.com>"]
+edition = "2018"
+license = "MIT"
+categories = ["text-processing"]
+keywords = ["similarity", "jaro"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+kodama = "0.2.3"
+strsim = "0.10.0"
+rayon = "1.5"
