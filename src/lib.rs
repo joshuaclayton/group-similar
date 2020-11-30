@@ -75,62 +75,80 @@ pub fn group_similar<'a, 'b, V>(
 where
     V: std::hash::Hash + Eq + Sync,
 {
-    let mut ret = HashMap::new();
+    let mut results = HashMap::new();
 
     let mut condensed = similarity_matrix(records, &config.compare);
     let dend = linkage(&mut condensed, records.len(), config.method);
-    let mut full: Full<f64, &V> = HashMap::default();
+    let mut dendro: Dendro<f64, &V> = HashMap::default();
 
-    for (idx, r) in records.iter().enumerate() {
-        full.insert(idx, Item::ItemRef(r));
+    for (idx, record) in records.iter().enumerate() {
+        dendro.insert(idx, Dendrogram::Node(record));
     }
 
     let base = records.len();
     for (idx, step) in dend.steps().iter().enumerate() {
-        full.insert(base + idx, Item::StepRef(step));
+        dendro.insert(base + idx, Dendrogram::Group(step));
     }
 
+    // We reverse this to start with the most dissimilar first, ultimately operating within the
+    // threshold. The result is that the largest groups bubble up to the top, ensuring that we're
+    // casting the widest net from closer matches when building the result set.
     for (idx, step) in dend.steps().iter().enumerate().rev() {
         if config.threshold.within(step.dissimilarity) {
-            match get_values(&mut full, base + idx).as_slice() {
+            match extract_values(&mut dendro, base + idx).as_slice() {
                 [first, rest @ ..] => {
-                    ret.entry(*first).or_insert(vec![]).extend(rest);
+                    results.entry(*first).or_insert(vec![]).extend(rest);
                 }
                 [] => {}
             }
         }
     }
 
-    for item in get_items(&full) {
-        ret.insert(item, vec![]);
+    for node in get_remaining_nodes(&dendro) {
+        results.insert(node, vec![]);
     }
 
-    ret
+    results
 }
 
-type Full<'a, F, V> = HashMap<usize, Item<'a, F, V>>;
+type Dendro<'a, F, V> = HashMap<usize, Dendrogram<'a, F, V>>;
 
-fn get_values<'a, 'b, F, V>(full: &mut Full<'a, F, V>, at: usize) -> Vec<V> {
+/// Recursively retrieve this and all child values to completion
+///
+/// If the value retrieved by index is present in the HashMap, we remove it. If it's an item
+/// directly, we push that onto the list of results. If it's a `Step` (which contains pointers to
+/// other steps or values), we recurse both sides (as a step can be linked to a value, or even
+/// another step).
+fn extract_values<'a, 'b, F, V>(dendro: &mut Dendro<'a, F, V>, at: usize) -> Vec<V> {
     let mut results = vec![];
 
-    if let Some(result) = full.remove(&at) {
+    if let Some(result) = dendro.remove(&at) {
         match result {
-            Item::StepRef(step) => {
-                results.extend(get_values(full, step.cluster1));
-                results.extend(get_values(full, step.cluster2));
+            Dendrogram::Group(step) => {
+                results.extend(extract_values(dendro, step.cluster1));
+                results.extend(extract_values(dendro, step.cluster2));
             }
-            Item::ItemRef(v) => results.push(v),
+            Dendrogram::Node(v) => results.push(v),
         }
     }
 
     results
 }
 
-fn get_items<'a, 'b, F, V>(full: &'b Full<'a, F, V>) -> Vec<&'b V> {
+/// Extract all item values from the HashMap
+///
+/// Given `extract_values` mutates the HashMap, removing values (so as not to duplicate results across
+/// different groups, the net result is a HashMap that may contain steps (e.g. that didn't meet the
+/// threshold criterion as the steps are too dissimilar) or items (if an item itself is too
+/// dissimilar from any other items or steps).
+///
+/// In this case, we still need to return those items, and have their associated matches be an
+/// emtpy Vec, when we add them to the returned HashMap.
+fn get_remaining_nodes<'a, 'b, F, V>(dendro: &'b Dendro<'a, F, V>) -> Vec<&'b V> {
     let mut results = vec![];
 
-    for value in full.values() {
-        if let Item::ItemRef(v) = value {
+    for value in dendro.values() {
+        if let Dendrogram::Node(v) = value {
             results.push(v);
         }
     }
@@ -139,11 +157,17 @@ fn get_items<'a, 'b, F, V>(full: &'b Full<'a, F, V>) -> Vec<&'b V> {
 }
 
 #[derive(Debug)]
-enum Item<'a, F, V> {
-    StepRef(&'a kodama::Step<F>),
-    ItemRef(V),
+enum Dendrogram<'a, F, V> {
+    Group(&'a kodama::Step<F>),
+    Node(V),
 }
 
+/// This function is very heavily inspired by the example provided within the kodama documentation
+/// (at https://docs.rs/kodama)
+///
+/// The biggest differences? This allows for the comparison operation to be provided, and it
+/// compares values leveraging Rayon to speed up the operations. Due to the use of Rayon, we
+/// construct an intermediate vector to hold positions for calculations.
 fn similarity_matrix<V, F>(inputs: &[V], compare: &F) -> Vec<f64>
 where
     F: Fn(&V, &V) -> f64 + Send + Sync,
