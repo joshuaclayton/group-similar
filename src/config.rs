@@ -1,4 +1,6 @@
 use kodama::Method;
+use std::convert::TryInto;
+use std::str::FromStr;
 
 /// `Config` manages grouping configuration based on three settings (managed internally);
 /// `threshold`, `method`, and `compare`.
@@ -57,11 +59,28 @@ impl<V: Named> Config<V> {
 ///
 /// This value is configurable and is a float between 0 and 1; 0 represents a threshold of exact
 /// matches, while 1 represents entirely permissive values.
+#[derive(Debug)]
 pub struct Threshold(f64);
 
 impl Threshold {
     pub(super) fn within(&self, dissimilarity: f64) -> bool {
         dissimilarity <= self.0
+    }
+}
+
+impl std::fmt::Display for Threshold {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for Threshold {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        f64::from_str(s)
+            .map_err(|e| format!("{}", e))
+            .and_then(|v| v.try_into())
     }
 }
 
@@ -72,11 +91,11 @@ impl Default for Threshold {
 }
 
 impl std::convert::TryFrom<f64> for Threshold {
-    type Error = &'static str;
+    type Error = String;
 
     fn try_from(input: f64) -> Result<Self, Self::Error> {
         if input < 0.0 || input > 1.0 {
-            Err("Threshold must be between 0 and 1")
+            Err("Threshold must be between 0 and 1".to_string())
         } else {
             Ok(Threshold(input))
         }
