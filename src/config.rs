@@ -59,7 +59,7 @@ impl<V: Named> Config<V> {
 ///
 /// This value is configurable and is a float between 0 and 1; 0 represents a threshold of exact
 /// matches, while 1 represents entirely permissive values.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Threshold(f64);
 
 impl Threshold {

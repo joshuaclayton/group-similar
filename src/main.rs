@@ -1,9 +1,20 @@
 use group_similar::{group_similar, Config, Named, Threshold};
+use serde::{Serialize, Serializer};
+use std::collections::HashMap;
 use std::io::{self, Read};
 use structopt::StructOpt;
 
 #[derive(Eq, PartialEq, std::hash::Hash, Debug)]
 struct Wrapper(String);
+
+impl Serialize for Wrapper {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0)
+    }
+}
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -12,9 +23,14 @@ struct Wrapper(String);
     setting = structopt::clap::AppSettings::ColoredHelp
 )]
 pub struct Flags {
-    /// Threshold
+    /// Configure a threshold, a value from 0 to 1, to dictate how strict (or permissive) the
+    /// matching algorithm is
     #[structopt(default_value, long)]
     pub threshold: Threshold,
+
+    /// Include all records rather than just results that have similar values
+    #[structopt(long)]
+    pub all: bool,
 }
 
 impl Wrapper {
@@ -47,18 +63,18 @@ fn main() -> io::Result<()> {
         .map(|v| Wrapper::new(v.into()))
         .collect::<Vec<Wrapper>>();
 
-    println!("processing {} records", input.len());
-    let config: Config<Wrapper> = Config::jaro_winkler(flags.threshold);
+    let config: Config<Wrapper> = Config::jaro_winkler(flags.threshold.clone());
 
-    for (primary, secondary) in group_similar(&input, &config) {
-        if !secondary.is_empty() {
-            println!("{}", primary);
-            for n in secondary {
-                println!("  {}", n);
-            }
-            println!("");
-        }
-    }
+    println!(
+        "{}",
+        serde_json::to_string(
+            &group_similar(&input, &config)
+                .iter()
+                .filter(|(_, v)| flags.all || !v.is_empty())
+                .collect::<HashMap<_, _>>()
+        )
+        .unwrap()
+    );
 
     Ok(())
 }
