@@ -1,20 +1,7 @@
-use group_similar::{group_similar, Config, Named, Threshold};
-use serde::{Serialize, Serializer};
+use group_similar::{group_similar, Config, Threshold};
 use std::collections::HashMap;
 use std::io::{self, Read};
 use structopt::StructOpt;
-
-#[derive(Eq, PartialEq, std::hash::Hash, Debug)]
-struct Wrapper(String);
-
-impl Serialize for Wrapper {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.0)
-    }
-}
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -33,23 +20,6 @@ pub struct Flags {
     pub all: bool,
 }
 
-impl Wrapper {
-    fn new(i: String) -> Self {
-        Wrapper(i)
-    }
-}
-
-impl std::fmt::Display for Wrapper {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-impl Named for Wrapper {
-    fn name(&self) -> &str {
-        &self.0
-    }
-}
-
 fn read_from_stdin() -> io::Result<String> {
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
@@ -58,12 +28,10 @@ fn read_from_stdin() -> io::Result<String> {
 
 fn main() -> io::Result<()> {
     let flags = Flags::from_args();
-    let input = read_from_stdin()?
-        .lines()
-        .map(|v| Wrapper::new(v.into()))
-        .collect::<Vec<Wrapper>>();
+    let stdin = read_from_stdin()?;
+    let input = stdin.lines().collect::<Vec<_>>();
 
-    let config: Config<Wrapper> = Config::jaro_winkler(flags.threshold.clone());
+    let config: Config<&str> = Config::jaro_winkler(flags.threshold.clone());
 
     println!(
         "{}",

@@ -18,38 +18,15 @@ pub struct Config<V> {
     pub(super) compare: Box<dyn Fn(&V, &V) -> f64 + Send + Sync>,
 }
 
-/// `Named` describes data structures with a particular name to be grouped based on a `&str` value.
-///
-/// Values to be grouped must implement this trait.
-///
-/// # Example
-///
-/// ```
-/// use group_similar::Named;
-///
-/// struct Merchant {
-///   id: usize,
-///   name: String
-/// }
-///
-/// impl Named for Merchant {
-///     fn name(&self) -> &str {
-///         &self.name
-///     }
-/// }
-/// ```
-pub trait Named {
-    /// Return a `&str` representation of the structure
-    fn name(&self) -> &str;
-}
-
-impl<V: Named> Config<V> {
+impl<V: std::fmt::Display> Config<V> {
     /// Construct a configuration using Jaro-Winkler for structure comparison
     pub fn jaro_winkler(threshold: Threshold) -> Self {
         Config {
             threshold,
             method: Method::Complete,
-            compare: Box::new(|a, b| 1.0 - strsim::jaro_winkler(a.name(), b.name())),
+            compare: Box::new(|a, b| {
+                1.0 - strsim::jaro_winkler(&format!("{}", a), &format!("{}", b))
+            }),
         }
     }
 }

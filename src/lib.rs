@@ -7,7 +7,7 @@
 //! # Example: Identify likely repeated merchants based on merchant name
 //!
 //! ```
-//! use group_similar::{Config, Named, Threshold, group_similar};
+//! use group_similar::{Config, Threshold, group_similar};
 //!
 //! #[derive(Eq, PartialEq, std::hash::Hash, Debug)]
 //! struct Merchant {
@@ -15,9 +15,10 @@
 //!   name: String
 //! }
 //!
-//! impl Named for Merchant {
-//!     fn name(&self) -> &str {
-//!         &self.name
+//!
+//! impl std::fmt::Display for Merchant {
+//!     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//!         write!(f, "{}", self.name)
 //!     }
 //! }
 //!
@@ -62,7 +63,7 @@
 //!
 mod config;
 
-pub use config::{Config, Named, Threshold};
+pub use config::{Config, Threshold};
 use indicatif::ParallelProgressIterator;
 use kodama::linkage;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -198,15 +199,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{group_similar, Config, Named};
+    use crate::{group_similar, Config};
     use std::collections::HashMap;
     use std::convert::TryInto;
-
-    impl Named for &str {
-        fn name(&self) -> &str {
-            self
-        }
-    }
 
     #[test]
     fn groups_all_together_with_permissive_threshold() {
