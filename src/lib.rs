@@ -176,6 +176,10 @@ where
     F: Fn(&V, &V) -> f64 + Send + Sync,
     V: Sync,
 {
+    if inputs.is_empty() {
+        return vec![];
+    }
+
     let mut intermediate = vec![];
     for row in 0..inputs.len() - 1 {
         for col in row + 1..inputs.len() {
@@ -202,6 +206,18 @@ mod tests {
     use crate::{group_similar, Config};
     use std::collections::HashMap;
     use std::convert::TryInto;
+
+    #[test]
+    fn allows_for_empty_list() {
+        let threshold = 1.0_f64.try_into().expect("permissive threshold");
+
+        let config: Config<String> = Config::jaro_winkler(threshold);
+
+        let values = vec![];
+
+        let outcome = HashMap::new();
+        assert_eq!(outcome, group_similar(&values, &config));
+    }
 
     #[test]
     fn groups_all_together_with_permissive_threshold() {
