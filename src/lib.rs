@@ -9,7 +9,7 @@
 //! ```
 //! use group_similar::{Config, Threshold, group_similar};
 //!
-//! #[derive(Eq, PartialEq, std::hash::Hash, Debug)]
+//! #[derive(Eq, PartialEq, std::hash::Hash, Debug, Ord, PartialOrd)]
 //! struct Merchant {
 //!   id: usize,
 //!   name: String
@@ -67,22 +67,22 @@ pub use config::{Config, Threshold};
 use indicatif::ParallelProgressIterator;
 use kodama::linkage;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 
 /// Group records based on a particular configuration
 pub fn group_similar<'a, 'b, V>(
     records: &'a [V],
     config: &'b Config<V>,
-) -> HashMap<&'a V, Vec<&'a V>>
+) -> BTreeMap<&'a V, Vec<&'a V>>
 where
-    V: std::hash::Hash + Eq + Sync,
+    V: std::hash::Hash + Eq + Sync + Ord,
 {
-    let mut results = HashMap::new();
+    let mut results = BTreeMap::new();
 
     let mut condensed = similarity_matrix(records, &config.compare);
     let dend = linkage(&mut condensed, records.len(), config.method);
-    let mut dendro: Dendro<f64, &V> = HashMap::default();
+    let mut dendro: Dendro<f64, &V> = BTreeMap::default();
 
     for (idx, record) in records.iter().enumerate() {
         dendro.insert(idx, Dendrogram::Node(record));
@@ -114,11 +114,11 @@ where
     results
 }
 
-type Dendro<'a, F, V> = HashMap<usize, Dendrogram<'a, F, V>>;
+type Dendro<'a, F, V> = BTreeMap<usize, Dendrogram<'a, F, V>>;
 
 /// Recursively retrieve this and all child values to completion
 ///
-/// If the value retrieved by index is present in the HashMap, we remove it. If it's an item
+/// If the value retrieved by index is present in the BTreeMap, we remove it. If it's an item
 /// directly, we push that onto the list of results. If it's a `Step` (which contains pointers to
 /// other steps or values), we recurse both sides (as a step can be linked to a value, or even
 /// another step).
@@ -138,15 +138,15 @@ fn extract_values<'a, 'b, F, V>(dendro: &mut Dendro<'a, F, V>, at: usize) -> Vec
     results
 }
 
-/// Extract all item values from the HashMap
+/// Extract all item values from the BTreeMap
 ///
-/// Given `extract_values` mutates the HashMap, removing values (so as not to duplicate results across
-/// different groups, the net result is a HashMap that may contain steps (e.g. that didn't meet the
+/// Given `extract_values` mutates the BTreeMap, removing values (so as not to duplicate results across
+/// different groups, the net result is a BTreeMap that may contain steps (e.g. that didn't meet the
 /// threshold criterion as the steps are too dissimilar) or items (if an item itself is too
 /// dissimilar from any other items or steps).
 ///
 /// In this case, we still need to return those items, and have their associated matches be an
-/// emtpy Vec, when we add them to the returned HashMap.
+/// emtpy Vec, when we add them to the returned BTreeMap.
 fn get_remaining_nodes<'a, 'b, F, V>(dendro: &'b Dendro<'a, F, V>) -> Vec<&'b V> {
     let mut results = vec![];
 
@@ -204,7 +204,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{group_similar, Config};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::convert::TryInto;
 
     #[test]
@@ -215,7 +215,7 @@ mod tests {
 
         let values = vec![];
 
-        let outcome = HashMap::new();
+        let outcome = BTreeMap::new();
         assert_eq!(outcome, group_similar(&values, &config));
     }
 
@@ -227,7 +227,7 @@ mod tests {
 
         let values = vec!["hello", "world"];
 
-        let mut outcome = HashMap::new();
+        let mut outcome = BTreeMap::new();
         outcome.insert(&"hello", vec![&"world"]);
         assert_eq!(outcome, group_similar(&values, &config));
     }
@@ -240,7 +240,7 @@ mod tests {
 
         let values = vec!["hello", "world"];
 
-        let mut outcome = HashMap::new();
+        let mut outcome = BTreeMap::new();
         outcome.insert(&"hello", vec![]);
         outcome.insert(&"world", vec![]);
         assert_eq!(outcome, group_similar(&values, &config));
@@ -254,7 +254,7 @@ mod tests {
 
         let values = vec!["Jane", "June", "Joan", "Joseph"];
 
-        let mut outcome = HashMap::new();
+        let mut outcome = BTreeMap::new();
         outcome.insert(&"Jane", vec![&"June"]);
         outcome.insert(&"Joan", vec![]);
         outcome.insert(&"Joseph", vec![]);
@@ -271,7 +271,7 @@ mod tests {
             "Henry", "Jane", "June", "Joan", "José", "Barry", "Joseph", "Mary", "Henry", "Harry",
         ];
 
-        let mut outcome = HashMap::new();
+        let mut outcome = BTreeMap::new();
         outcome.insert(&"José", vec![&"Joseph", &"Joan", &"Jane", &"June"]);
         outcome.insert(&"Henry", vec![&"Henry", &"Mary", &"Barry", &"Harry"]);
         assert_eq!(outcome, group_similar(&values, &config));

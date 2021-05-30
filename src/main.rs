@@ -2,6 +2,7 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use colored::*;
 use group_similar::{group_similar, Config, Threshold};
 use std::collections::HashMap;
 use std::io::{self, Read};
@@ -22,6 +23,10 @@ pub struct Flags {
     /// Include all records rather than just results that have similar values
     #[structopt(long)]
     pub all: bool,
+
+    /// Render results in JSON format
+    #[structopt(long)]
+    pub json: bool,
 }
 
 fn read_from_stdin() -> io::Result<String> {
@@ -37,16 +42,31 @@ fn main() -> io::Result<()> {
 
     let config: Config<&str> = Config::jaro_winkler(flags.threshold.clone());
 
-    println!(
-        "{}",
-        serde_json::to_string(
-            &group_similar(&input, &config)
-                .iter()
-                .filter(|(_, v)| flags.all || !v.is_empty())
-                .collect::<HashMap<_, _>>()
-        )
-        .unwrap()
-    );
+    if flags.json {
+        println!(
+            "{}",
+            serde_json::to_string(
+                &group_similar(&input, &config)
+                    .iter()
+                    .filter(|(_, v)| flags.all || !v.is_empty())
+                    .collect::<HashMap<_, _>>()
+            )
+            .unwrap()
+        );
+    } else {
+        for (k, vs) in group_similar(&input, &config)
+            .iter()
+            .filter(|(_, v)| flags.all || !v.is_empty())
+        {
+            println!("{}", k.green().bold());
+
+            for v in vs {
+                println!("   {}", v.dimmed().italic());
+            }
+
+            println!("");
+        }
+    }
 
     Ok(())
 }
