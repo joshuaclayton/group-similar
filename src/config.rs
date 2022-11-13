@@ -15,18 +15,17 @@ use std::str::FromStr;
 pub struct Config<V> {
     pub(super) threshold: Threshold,
     pub(super) method: Method,
-    pub(super) compare: Box<dyn Fn(&V, &V) -> f64 + Send + Sync>,
+    /// A closure that takes two values and returns a float between 0.0 and 1.0
+    pub compare: Box<dyn Fn(&V, &V) -> f64 + Send + Sync>,
 }
 
-impl<V: std::fmt::Display> Config<V> {
+impl<V: AsRef<str>> Config<V> {
     /// Construct a configuration using Jaro-Winkler for structure comparison
     pub fn jaro_winkler(threshold: Threshold) -> Self {
         Config {
             threshold,
             method: Method::Complete,
-            compare: Box::new(|a, b| {
-                1.0 - strsim::jaro_winkler(&format!("{}", a), &format!("{}", b))
-            }),
+            compare: Box::new(|a, b| 1.0 - jaro_winkler::jaro_winkler(&a.as_ref(), &b.as_ref())),
         }
     }
 }

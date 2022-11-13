@@ -22,6 +22,12 @@
 //!     }
 //! }
 //!
+//! impl AsRef<str> for Merchant {
+//!     fn as_ref(&self) -> &str {
+//!         &self.name
+//!     }
+//! }
+//!
 //! let merchants = vec![
 //!     Merchant {
 //!         id: 1,
@@ -74,12 +80,13 @@ pub fn group_similar<'a, 'b, V>(
     config: &'b Config<V>,
 ) -> BTreeMap<&'a V, Vec<&'a V>>
 where
-    V: std::hash::Hash + Eq + Sync + Ord,
+    V: std::hash::Hash + AsRef<str> + Eq + Sync + Ord,
 {
     let mut results = BTreeMap::new();
 
     let mut condensed = similarity_matrix(records, &config.compare);
     let dend = linkage(&mut condensed, records.len(), config.method);
+
     let mut dendro: Dendro<f64, &V> = BTreeMap::default();
 
     for (idx, record) in records.iter().enumerate() {
@@ -87,6 +94,7 @@ where
     }
 
     let base = records.len();
+
     for (idx, step) in dend.steps().iter().enumerate() {
         dendro.insert(base + idx, Dendrogram::Group(step));
     }
@@ -169,26 +177,24 @@ enum Dendrogram<'a, F, V> {
 /// The biggest differences? This allows for the comparison operation to be provided, and it
 /// compares values leveraging Rayon to speed up the operations. Due to the use of Rayon, we
 /// construct an intermediate vector to hold positions for calculations.
-fn similarity_matrix<V, F>(inputs: &[V], compare: &F) -> Vec<f64>
+pub fn similarity_matrix<V, F>(inputs: &[V], compare: &F) -> Vec<f64>
 where
     F: Fn(&V, &V) -> f64 + Send + Sync,
-    V: Sync,
+    V: Sync + AsRef<str>,
 {
     if inputs.is_empty() {
         return vec![];
     }
 
-    let mut intermediate = vec![];
-    for row in 0..inputs.len() - 1 {
-        for col in row + 1..inputs.len() {
-            intermediate.push((row, col))
-        }
-    }
+    let ilen = inputs.len();
+    let intermediate = (0..ilen - 1)
+        .flat_map(|row| (row + 1..ilen).map(move |col| (row, col)))
+        .collect::<Vec<_>>();
 
     intermediate
         .par_iter()
         .map(|(row, col)| (compare)(&inputs[*row], &inputs[*col]))
-        .collect()
+        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]
@@ -201,7 +207,7 @@ mod tests {
     fn allows_for_empty_list() {
         let threshold = 1.0_f64.try_into().expect("permissive threshold");
 
-        let config: Config<String> = Config::jaro_winkler(threshold);
+        let config: Config<&str> = Config::jaro_winkler(threshold);
 
         let values = vec![];
 
