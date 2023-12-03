@@ -64,11 +64,9 @@
 mod config;
 
 pub use config::{Config, Threshold};
-use indicatif::ParallelProgressIterator;
 use kodama::linkage;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 
 /// Group records based on a particular configuration
 pub fn group_similar<'a, 'b, V>(
@@ -187,16 +185,8 @@ where
         }
     }
 
-    let pb = indicatif::ProgressBar::new(intermediate.len().try_into().unwrap());
-    pb.set_style(
-        indicatif::ProgressStyle::default_bar()
-            .template("[{wide_bar:.cyan/blue}] {pos}/{len} ({percent}%, {eta_precise})")
-            .progress_chars("#>-"),
-    );
-
     intermediate
         .par_iter()
-        .progress_with(pb)
         .map(|(row, col)| (compare)(&inputs[*row], &inputs[*col]))
         .collect()
 }
