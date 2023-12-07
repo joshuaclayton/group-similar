@@ -2,7 +2,7 @@
 name = "group-similar"
 description = "Group similar values based on Jaro-Winkler distance"
 repository = "https://github.com/joshuaclayton/group-similar"
-version = "0.2.0"
+version = "0.2.2"
 authors = ["Joshua Clayton <joshua.clayton@gmail.com>"]
 edition = "2018"
 license = "MIT"
