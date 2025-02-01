@@ -71,23 +71,20 @@ mod config;
 
 pub use config::{Config, Threshold};
 use kodama::linkage;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::collections::BTreeMap;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rustc_hash::FxHashMap;
 
 /// Group records based on a particular configuration
-pub fn group_similar<'a, 'b, V>(
-    records: &'a [V],
-    config: &'b Config<V>,
-) -> BTreeMap<&'a V, Vec<&'a V>>
+pub fn group_similar<'a, V>(records: &'a [V], config: &Config<V>) -> FxHashMap<&'a V, Vec<&'a V>>
 where
     V: std::hash::Hash + AsRef<str> + Eq + Sync + Ord,
 {
-    let mut results = BTreeMap::new();
+    let mut results = FxHashMap::default();
 
     let mut condensed = similarity_matrix(records, &config.compare);
     let dend = linkage(&mut condensed, records.len(), config.method);
 
-    let mut dendro: Dendro<f64, &V> = BTreeMap::default();
+    let mut dendro: Dendro<f64, &V> = FxHashMap::default();
 
     for (idx, record) in records.iter().enumerate() {
         dendro.insert(idx, Dendrogram::Node(record));
@@ -120,15 +117,15 @@ where
     results
 }
 
-type Dendro<'a, F, V> = BTreeMap<usize, Dendrogram<'a, F, V>>;
+type Dendro<'a, F, V> = FxHashMap<usize, Dendrogram<'a, F, V>>;
 
 /// Recursively retrieve this and all child values to completion
 ///
-/// If the value retrieved by index is present in the BTreeMap, we remove it. If it's an item
+/// If the value retrieved by index is present in the FxHashMap, we remove it. If it's an item
 /// directly, we push that onto the list of results. If it's a `Step` (which contains pointers to
 /// other steps or values), we recurse both sides (as a step can be linked to a value, or even
 /// another step).
-fn extract_values<'a, 'b, F, V>(dendro: &mut Dendro<'a, F, V>, at: usize) -> Vec<V> {
+fn extract_values<F, V>(dendro: &mut Dendro<F, V>, at: usize) -> Vec<V> {
     let mut results = vec![];
 
     if let Some(result) = dendro.remove(&at) {
@@ -144,16 +141,16 @@ fn extract_values<'a, 'b, F, V>(dendro: &mut Dendro<'a, F, V>, at: usize) -> Vec
     results
 }
 
-/// Extract all item values from the BTreeMap
+/// Extract all item values from the FxHashMap
 ///
-/// Given `extract_values` mutates the BTreeMap, removing values (so as not to duplicate results across
-/// different groups, the net result is a BTreeMap that may contain steps (e.g. that didn't meet the
+/// Given `extract_values` mutates the FxHashMap, removing values (so as not to duplicate results across
+/// different groups, the net result is a FxHashMap that may contain steps (e.g. that didn't meet the
 /// threshold criterion as the steps are too dissimilar) or items (if an item itself is too
 /// dissimilar from any other items or steps).
 ///
 /// In this case, we still need to return those items, and have their associated matches be an
-/// emtpy Vec, when we add them to the returned BTreeMap.
-fn get_remaining_nodes<'a, 'b, F, V>(dendro: &'b Dendro<'a, F, V>) -> Vec<&'b V> {
+/// emtpy Vec, when we add them to the returned FxHashMap.
+fn get_remaining_nodes<'a, F, V>(dendro: &'a Dendro<F, V>) -> Vec<&'a V> {
     let mut results = vec![];
 
     for value in dendro.values() {
@@ -182,25 +179,26 @@ where
     F: Fn(&V, &V) -> f64 + Send + Sync,
     V: Sync + AsRef<str>,
 {
-    if inputs.is_empty() {
+    let ilen = inputs.len();
+    if ilen == 0 {
         return vec![];
     }
 
-    let ilen = inputs.len();
-    let intermediate = (0..ilen - 1)
-        .flat_map(|row| (row + 1..ilen).map(move |col| (row, col)))
-        .collect::<Vec<_>>();
-
-    intermediate
-        .par_iter()
-        .map(|(row, col)| (compare)(&inputs[*row], &inputs[*col]))
-        .collect::<Vec<_>>()
+    (0..ilen - 1)
+        .into_par_iter() // Parallelize the outer range
+        .map(|row| {
+            (row + 1..ilen)
+                .map(|col| (compare)(&inputs[row], &inputs[col])) // Sequential inner loop
+                .collect::<Vec<_>>() // Collect results for this row
+        })
+        .flatten()
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{group_similar, Config};
-    use std::collections::BTreeMap;
+    use rustc_hash::FxHashMap;
     use std::convert::TryInto;
 
     #[test]
@@ -211,7 +209,7 @@ mod tests {
 
         let values = vec![];
 
-        let outcome = BTreeMap::new();
+        let outcome = FxHashMap::default();
         assert_eq!(outcome, group_similar(&values, &config));
     }
 
@@ -223,7 +221,7 @@ mod tests {
 
         let values = vec!["hello", "world"];
 
-        let mut outcome = BTreeMap::new();
+        let mut outcome = FxHashMap::default();
         outcome.insert(&"hello", vec![&"world"]);
         assert_eq!(outcome, group_similar(&values, &config));
     }
@@ -236,7 +234,7 @@ mod tests {
 
         let values = vec!["hello", "world"];
 
-        let mut outcome = BTreeMap::new();
+        let mut outcome = FxHashMap::default();
         outcome.insert(&"hello", vec![]);
         outcome.insert(&"world", vec![]);
         assert_eq!(outcome, group_similar(&values, &config));
@@ -250,7 +248,7 @@ mod tests {
 
         let values = vec!["Jane", "June", "Joan", "Joseph"];
 
-        let mut outcome = BTreeMap::new();
+        let mut outcome = FxHashMap::default();
         outcome.insert(&"Jane", vec![&"June"]);
         outcome.insert(&"Joan", vec![]);
         outcome.insert(&"Joseph", vec![]);
@@ -267,7 +265,7 @@ mod tests {
             "Henry", "Jane", "June", "Joan", "José", "Barry", "Joseph", "Mary", "Henry", "Harry",
         ];
 
-        let mut outcome = BTreeMap::new();
+        let mut outcome = FxHashMap::default();
         outcome.insert(&"José", vec![&"Joseph", &"Joan", &"Jane", &"June"]);
         outcome.insert(&"Henry", vec![&"Henry", &"Mary", &"Barry", &"Harry"]);
         assert_eq!(outcome, group_similar(&values, &config));
