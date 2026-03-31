@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use group_similar::{Config, Threshold};
+use group_similar::{normalize, Config, Distance, Threshold};
 use std::hint::black_box;
 
 type Template = Box<dyn Fn(&mut SimpleRng) -> String>;
@@ -249,8 +249,12 @@ fn bench_blog_cms(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("blog_cms");
     group.sample_size(10);
-    group.bench_function("group_similar", |b| {
+    group.bench_function("jaro_winkler", |b| {
         let config: Config<&str> = Config::jaro_winkler(Threshold::default());
+        b.iter(|| group_similar::group_similar(black_box(&strings), &config))
+    });
+    group.bench_function("cosine_positional", |b| {
+        let config: Config<&str> = Config::token_cosine_positional(&strings, Threshold::default());
         b.iter(|| group_similar::group_similar(black_box(&strings), &config))
     });
     group.finish();
@@ -265,9 +269,27 @@ fn bench_ecommerce_errors(c: &mut Criterion) {
     let small_slice = &strings[..2000];
     let mut group = c.benchmark_group("ecommerce_25k");
     group.sample_size(10);
-    group.bench_function("no_normalizer_2k_slice", |b| {
+    group.bench_function("jaro_no_normalizer_2k_slice", |b| {
         let config: Config<&str> = Config::jaro_winkler(Threshold::default());
         b.iter(|| group_similar::group_similar(black_box(small_slice), &config))
+    });
+    group.bench_function("cosine_pos_no_normalizer_2k_slice", |b| {
+        let config: Config<&str> =
+            Config::token_cosine_positional(&small_slice.to_vec(), Threshold::default());
+        b.iter(|| group_similar::group_similar(black_box(small_slice), &config))
+    });
+
+    // With normalizer at full 25k: collapses to ~5 unique templates.
+    group.sample_size(100);
+    group.bench_function("jaro_with_normalizer_full", |b| {
+        let config: Config<&str> = Config::jaro_winkler(Threshold::default())
+            .with_normalizer(normalize::default_normalizer());
+        b.iter(|| group_similar::group_similar(black_box(&strings), &config))
+    });
+    group.bench_function("cosine_pos_with_normalizer_full", |b| {
+        let config: Config<&str> = Config::token_cosine_positional(&strings, Threshold::default())
+            .with_normalizer(normalize::default_normalizer());
+        b.iter(|| group_similar::group_similar(black_box(&strings), &config))
     });
     group.finish();
 }
@@ -292,9 +314,27 @@ fn bench_mixed(c: &mut Criterion) {
     let small_slice = &strings[..5000.min(strings.len())];
     let mut group = c.benchmark_group("mixed_30k");
     group.sample_size(10);
-    group.bench_function("no_normalizer_5k_slice", |b| {
+    group.bench_function("jaro_no_normalizer_5k_slice", |b| {
         let config: Config<&str> = Config::jaro_winkler(Threshold::default());
         b.iter(|| group_similar::group_similar(black_box(small_slice), &config))
+    });
+    group.bench_function("cosine_pos_no_normalizer_5k_slice", |b| {
+        let config: Config<&str> =
+            Config::token_cosine_positional(&small_slice.to_vec(), Threshold::default());
+        b.iter(|| group_similar::group_similar(black_box(small_slice), &config))
+    });
+
+    // With normalizer at full scale: collapses to ~50 representatives.
+    group.sample_size(100);
+    group.bench_function("jaro_with_normalizer_full", |b| {
+        let config: Config<&str> = Config::jaro_winkler(Threshold::default())
+            .with_normalizer(normalize::default_normalizer());
+        b.iter(|| group_similar::group_similar(black_box(&strings), &config))
+    });
+    group.bench_function("cosine_pos_with_normalizer_full", |b| {
+        let config: Config<&str> = Config::token_cosine_positional(&strings, Threshold::default())
+            .with_normalizer(normalize::default_normalizer());
+        b.iter(|| group_similar::group_similar(black_box(&strings), &config))
     });
     group.finish();
 }
@@ -404,7 +444,8 @@ fn bench_similarity_matrix(c: &mut Criterion) {
     ]);
 
     c.bench_function("similarity_matrix/dictionary_100", |b| {
-        let compare = |a: &&str, b: &&str| 1.0 - jaro_winkler::jaro_winkler(a, b);
+        let compare =
+            |a: &&str, b: &&str| Distance::clamped(1.0 - jaro_winkler::jaro_winkler(a, b));
         b.iter(|| group_similar::similarity_matrix(list, &compare))
     });
 }

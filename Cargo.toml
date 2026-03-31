@@ -1,26 +1,25 @@
 [package]
 name = "group-similar"
-description = "Group similar values based on Jaro-Winkler distance"
+description = "Hierarchical clustering by similarity, with batteries-included string metrics"
 repository = "https://github.com/joshuaclayton/group-similar"
 version = "0.2.2"
 authors = ["Joshua Clayton <joshua.clayton@gmail.com>"]
 edition = "2018"
 license = "MIT"
-categories = ["text-processing"]
-keywords = ["similarity", "jaro"]
+categories = ["algorithms", "text-processing"]
+keywords = ["clustering", "similarity", "hierarchical", "jaro", "cosine"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kodama = "0.2.3"
-strsim = "0.10.0"
-rayon = "1.5"
-structopt = "0.3"
-serde_json = "1.0"
-serde = "1.0"
+colored = "3"
+jaro_winkler = "0.2"
+kodama = "0.3"
 mimalloc = { version = "0.1", default-features = false }
-colored = "2"
-jaro_winkler = "0.1.0"
+rayon = "1.5"
+serde = "1.0"
+serde_json = "1.0"
+structopt = "0.3"
 
 [dev-dependencies]
 criterion = "0.8"
