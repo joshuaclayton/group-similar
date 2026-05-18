@@ -64,7 +64,7 @@ fn main() -> io::Result<()> {
                 println!("   {}", v.dimmed().italic());
             }
 
-            println!("");
+            println!();
         }
     }
 

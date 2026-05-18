@@ -16,6 +16,7 @@ pub struct Config<V> {
     pub(super) threshold: Threshold,
     pub(super) method: Method,
     /// A closure that takes two values and returns a float between 0.0 and 1.0
+    #[allow(clippy::type_complexity)]
     pub compare: Box<dyn Fn(&V, &V) -> f64 + Send + Sync>,
 }
 
@@ -25,7 +26,7 @@ impl<V: AsRef<str>> Config<V> {
         Config {
             threshold,
             method: Method::Complete,
-            compare: Box::new(|a, b| 1.0 - jaro_winkler::jaro_winkler(&a.as_ref(), &b.as_ref())),
+            compare: Box::new(|a, b| 1.0 - jaro_winkler::jaro_winkler(a.as_ref(), b.as_ref())),
         }
     }
 }
@@ -70,7 +71,7 @@ impl std::convert::TryFrom<f64> for Threshold {
     type Error = String;
 
     fn try_from(input: f64) -> Result<Self, Self::Error> {
-        if input < 0.0 || input > 1.0 {
+        if !(0.0..=1.0).contains(&input) {
             Err("Threshold must be between 0 and 1".to_string())
         } else {
             Ok(Threshold(input))

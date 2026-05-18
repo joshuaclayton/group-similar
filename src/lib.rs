@@ -75,9 +75,9 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::collections::BTreeMap;
 
 /// Group records based on a particular configuration
-pub fn group_similar<'a, 'b, V>(
+pub fn group_similar<'a, V>(
     records: &'a [V],
-    config: &'b Config<V>,
+    config: &Config<V>,
 ) -> BTreeMap<&'a V, Vec<&'a V>>
 where
     V: std::hash::Hash + AsRef<str> + Eq + Sync + Ord,
@@ -104,11 +104,8 @@ where
     // casting the widest net from closer matches when building the result set.
     for (idx, step) in dend.steps().iter().enumerate().rev() {
         if config.threshold.within(step.dissimilarity) {
-            match extract_values(&mut dendro, base + idx).as_slice() {
-                [first, rest @ ..] => {
-                    results.entry(*first).or_insert(vec![]).extend(rest);
-                }
-                [] => {}
+            if let [first, rest @ ..] = extract_values(&mut dendro, base + idx).as_slice() {
+                results.entry(*first).or_insert(vec![]).extend(rest);
             }
         }
     }
@@ -128,7 +125,7 @@ type Dendro<'a, F, V> = BTreeMap<usize, Dendrogram<'a, F, V>>;
 /// directly, we push that onto the list of results. If it's a `Step` (which contains pointers to
 /// other steps or values), we recurse both sides (as a step can be linked to a value, or even
 /// another step).
-fn extract_values<'a, 'b, F, V>(dendro: &mut Dendro<'a, F, V>, at: usize) -> Vec<V> {
+fn extract_values<'a, F, V>(dendro: &mut Dendro<'a, F, V>, at: usize) -> Vec<V> {
     let mut results = vec![];
 
     if let Some(result) = dendro.remove(&at) {
@@ -271,5 +268,41 @@ mod tests {
         outcome.insert(&"José", vec![&"Joseph", &"Joan", &"Jane", &"June"]);
         outcome.insert(&"Henry", vec![&"Henry", &"Mary", &"Barry", &"Harry"]);
         assert_eq!(outcome, group_similar(&values, &config));
+    }
+
+    use quickcheck_macros::quickcheck;
+
+    #[quickcheck]
+    fn prop_every_input_appears_in_output(values: Vec<String>) -> bool {
+        if values.is_empty() {
+            return true;
+        }
+        let refs: Vec<&str> = values.iter().map(|s| s.as_str()).collect();
+        let config: Config<&str> = Config::jaro_winkler(0.25_f64.try_into().unwrap());
+        let result = group_similar(&refs, &config);
+
+        let mut seen: Vec<&&str> = Vec::new();
+        for (k, vs) in &result {
+            seen.push(k);
+            seen.extend(vs.iter());
+        }
+        seen.sort();
+
+        let mut expected: Vec<&&str> = refs.iter().collect();
+        expected.sort();
+
+        seen == expected
+    }
+
+    #[quickcheck]
+    fn prop_empty_threshold_produces_singletons(values: Vec<String>) -> bool {
+        if values.is_empty() {
+            return true;
+        }
+        let refs: Vec<&str> = values.iter().map(|s| s.as_str()).collect();
+        let config: Config<&str> = Config::jaro_winkler(0.0_f64.try_into().unwrap());
+        let result = group_similar(&refs, &config);
+
+        result.iter().all(|(k, vs)| vs.iter().all(|v| k == v))
     }
 }
