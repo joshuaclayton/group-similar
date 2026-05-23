@@ -2,7 +2,7 @@
 name = "group-similar"
 description = "Hierarchical clustering by similarity, with batteries-included string metrics"
 repository = "https://github.com/joshuaclayton/group-similar"
-version = "0.2.2"
+version = "0.3.0"
 authors = ["Joshua Clayton <joshua.clayton@gmail.com>"]
 edition = "2018"
 license = "MIT"
